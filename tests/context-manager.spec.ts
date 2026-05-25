@@ -249,4 +249,33 @@ describe('ContextManager', () => {
     expect(guidanceMessage?.content).toContain('Use read_file for bounded file reads before using bash cat.');
     expect(observability.count('context.inject', 'executed')).toBe(1);
   });
+
+  it('injects recalled memory into a dedicated head system message', async () => {
+    const provider = new FakeProvider();
+    const observability = new Observability();
+    const manager = new ContextManager(provider, observability);
+    const messages: Message[] = [
+      { id: 'user-memory-1', role: 'user', createdAt: new Date().toISOString(), content: 'How did we fix vite build?' },
+    ];
+
+    const result = await manager.build({
+      sessionId: 's7',
+      turnId: 't1',
+      messages,
+      contextInjections: [
+        {
+          source: 'memory.recall',
+          content: 'Vite Build Fix: aligned tsconfig paths and cleaned stale output.',
+        },
+      ],
+    });
+
+    const memoryMessage = result.requestMessages.find(
+      (message) => message.role === 'system' && message.content.startsWith('Memory recall:'),
+    );
+
+    expect(memoryMessage).toBeDefined();
+    expect(memoryMessage?.content).toContain('Vite Build Fix');
+    expect(observability.count('context.inject.memory', 'executed')).toBe(1);
+  });
 });

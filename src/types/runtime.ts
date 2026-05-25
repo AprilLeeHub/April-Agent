@@ -78,6 +78,7 @@ export interface AgentSession {
   pendingUserTurn?: PendingUserTurn;
   pendingApprovals: PendingToolApproval[];
   pendingInterventions: Message[];
+  pendingContextInjections: PendingContextInjection[];
   toolCallHistory: ToolCallFingerprint[];
   createdAt: string;
   updatedAt: string;
@@ -159,6 +160,11 @@ export interface RiskAssessment {
 export interface ContextInjection {
   source: string;
   content: string;
+}
+
+export interface PendingContextInjection extends ContextInjection {
+  createdAt: string;
+  turnsRemaining: number;
 }
 
 export interface ApprovalRoute {
@@ -243,6 +249,7 @@ export interface ToolExecutionResult {
   toolMessage: ToolMessage;
   receipt: ToolChainReceipt;
   blocked: boolean;
+  contextInjections?: ContextInjection[];
   pendingApproval?: PendingToolApproval;
   error?: string;
 }
@@ -316,6 +323,78 @@ export interface SummaryModelConfig {
   extra?: Record<string, unknown>;
 }
 
+export interface KnowledgeSearchInput {
+  query: string;
+  limit?: number;
+}
+
+export interface KnowledgeSnippet {
+  id: string;
+  source: string;
+  title: string;
+  content: string;
+  excerpt: string;
+  score: number;
+  path?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface KnowledgeSource {
+  name: string;
+  search(
+    input: KnowledgeSearchInput,
+    context?: {
+      sessionId?: string;
+      turnId?: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<KnowledgeSnippet[]>;
+}
+
+export interface MemoryEntry {
+  id: string;
+  title: string;
+  content: string;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+  path?: string;
+  metadata?: Record<string, JsonValue>;
+}
+
+export interface MemoryStore extends KnowledgeSource {
+  save(entry: MemoryEntry): Promise<MemoryEntry>;
+  delete(id: string): Promise<boolean>;
+}
+
+export interface MemoryMetadataContext {
+  session: AgentSession;
+  checkpoint: AgentCheckpoint;
+  summary: string;
+  messages: Message[];
+  decisionEvents: DecisionEvent[];
+}
+
+export interface MemoryMetadataConfig {
+  defaults?: Record<string, JsonValue>;
+  resolve?: (
+    context: MemoryMetadataContext,
+  ) => Promise<Record<string, JsonValue> | undefined> | Record<string, JsonValue> | undefined;
+}
+
+export interface MemoryExtractionInput {
+  session: AgentSession;
+  checkpoint: AgentCheckpoint;
+  previousTurnEndCheckpoint?: AgentCheckpoint;
+}
+
+export interface MemoryRecallInput {
+  session: AgentSession;
+  query: string;
+  limit?: number;
+  signal?: AbortSignal;
+}
+
 export interface SessionView {
   sessionId: string;
   lastMessages: Message[];
@@ -336,6 +415,7 @@ export function createSession(sessionId: string): AgentSession {
     messages: [],
     pendingApprovals: [],
     pendingInterventions: [],
+    pendingContextInjections: [],
     toolCallHistory: [],
     createdAt: timestamp,
     updatedAt: timestamp,

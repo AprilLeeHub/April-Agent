@@ -4,6 +4,7 @@
  */
 
 import { assertToolChainAdjacency, createMessageId, createTimestamp, createToolResultMessage } from '../types/messages.js';
+import type { MemoryOrchestrator } from '../knowledge/orchestrator.js';
 import type { AgentCheckpoint, AgentSession, ContextInjection, Message, PendingContextInjection, PendingToolApproval, ProviderAdapter, SerializedRuntimeError, ToolCall } from '../types/index.js';
 import type { CheckpointStore } from '../storage/checkpoint-store.js';
 import type { SessionStore } from '../storage/session-store.js';
@@ -19,6 +20,7 @@ interface AgentEngineOptions {
   maxSteps?: number;
   systemPrompt?: string;
   hardConstraints?: string[];
+  memoryOrchestrator?: MemoryOrchestrator;
 }
 
 interface RunTurnOptions {
@@ -260,7 +262,11 @@ export class AgentEngine {
       this.throwIfCancelled(signal);
       session = await this.getExistingSession(session.id);
       session = await this.flushInterventionsIfSafe(session);
-      const activeContextInjections = this.materializeContextInjections(session.pendingContextInjections);
+      const passiveMemoryInjections = await this.buildPassiveMemoryInjections(session, signal, step);
+      const activeContextInjections = [
+        ...passiveMemoryInjections,
+        ...this.materializeContextInjections(session.pendingContextInjections),
+      ];
 
       const context = await this.contextManager.build({
         sessionId: session.id,
@@ -609,14 +615,95 @@ export class AgentEngine {
   }
 
   private async writeCheckpoint(stage: AgentCheckpoint['stage'], session: AgentSession): Promise<void> {
-    await this.checkpointStore.append({
+    const checkpoint = {
       sessionId: session.id,
       turnId: session.turnId,
       stage,
       session,
       createdAt: createTimestamp(),
       decisionEvents: this.observability.list(session.id),
-    });
+    } satisfies AgentCheckpoint;
+
+    await this.checkpointStore.append(checkpoint);
+    if (stage === 'turn_end' && this.options.memoryOrchestrator) {
+      // 回合提炼不阻塞主流程，异步落地为 episodic memory。
+      void this.extractTurnMemory(checkpoint);
+    }
+  }
+
+  private async buildPassiveMemoryInjections(
+    session: AgentSession,
+    signal: AbortSignal,
+    step: number,
+  ): Promise<ContextInjection[]> {
+    if (step > 0 || !this.options.memoryOrchestrator || !session.latestUserGoal) {
+      return [];
+    }
+
+    try {
+      const injections = await this.options.memoryOrchestrator.recall({
+        session,
+        query: session.latestUserGoal,
+        signal,
+      });
+
+      this.observability[injections.length > 0 ? 'executed' : 'skipped'](
+        session.id,
+        session.turnId,
+        'memory.recall',
+        injections.length > 0
+          ? `Recalled ${injections.length} memory snippet(s) for the upcoming turn.`
+          : 'No relevant memory snippets matched the current user goal.',
+        {
+          count: injections.length,
+        },
+      );
+      return injections;
+    } catch (error) {
+      this.observability.error(
+        session.id,
+        session.turnId,
+        'memory.recall',
+        error instanceof Error ? error.message : String(error),
+      );
+      return [];
+    }
+  }
+
+  private async extractTurnMemory(checkpoint: AgentCheckpoint): Promise<void> {
+    if (!this.options.memoryOrchestrator) {
+      return;
+    }
+
+    try {
+      const checkpoints = await this.checkpointStore.list(checkpoint.sessionId);
+      const previousTurnEndCheckpoint = checkpoints
+        .slice(0, -1)
+        .reverse()
+        .find((candidate) => candidate.stage === 'turn_end');
+      const extracted = await this.options.memoryOrchestrator.extractTurn({
+        session: checkpoint.session,
+        checkpoint,
+        ...(previousTurnEndCheckpoint ? { previousTurnEndCheckpoint } : {}),
+      });
+
+      this.observability[extracted ? 'executed' : 'skipped'](
+        checkpoint.sessionId,
+        checkpoint.turnId,
+        'memory.extract',
+        extracted
+          ? `Persisted episodic memory ${extracted.id}.`
+          : 'No durable episodic memory was produced for this turn.',
+        extracted?.path ? { path: extracted.path } : undefined,
+      );
+    } catch (error) {
+      this.observability.error(
+        checkpoint.sessionId,
+        checkpoint.turnId,
+        'memory.extract',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   private mergeSignals(signals: AbortSignal[]): { signal: AbortSignal; dispose: () => void } {

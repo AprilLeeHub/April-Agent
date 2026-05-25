@@ -247,18 +247,37 @@ export class ContextManager {
     }
 
     const contextInjections = this.dedupeContextInjections(input.contextInjections ?? []);
-    if (contextInjections.length > 0) {
+    const memoryInjections = contextInjections.filter((injection) => injection.source.startsWith('memory.'));
+    const policyInjections = contextInjections.filter((injection) => !injection.source.startsWith('memory.'));
+
+    if (memoryInjections.length > 0) {
+      this.observability.executed(
+        input.sessionId,
+        input.turnId,
+        'context.inject.memory',
+        `Injected ${memoryInjections.length} memory recall snippet(s) into the provider request.`,
+        {
+          count: memoryInjections.length,
+          sources: memoryInjections.map((injection) => injection.source),
+        },
+      );
+      messages.push(this.systemMessage(`Memory recall:\n${memoryInjections.map((injection) => `- ${injection.content}`).join('\n')}`));
+    } else {
+      this.observability.skipped(input.sessionId, input.turnId, 'context.inject.memory', 'No memory recall snippets were pending for this request.');
+    }
+
+    if (policyInjections.length > 0) {
       this.observability.executed(
         input.sessionId,
         input.turnId,
         'context.inject',
-        `Injected ${contextInjections.length} policy guidance hint(s) into the provider request.`,
+        `Injected ${policyInjections.length} policy guidance hint(s) into the provider request.`,
         {
-          count: contextInjections.length,
-          sources: contextInjections.map((injection) => injection.source),
+          count: policyInjections.length,
+          sources: policyInjections.map((injection) => injection.source),
         },
       );
-      messages.push(this.systemMessage(`Policy guidance:\n${contextInjections.map((injection) => `- ${injection.source}: ${injection.content}`).join('\n')}`));
+      messages.push(this.systemMessage(`Policy guidance:\n${policyInjections.map((injection) => `- ${injection.source}: ${injection.content}`).join('\n')}`));
     } else {
       this.observability.skipped(input.sessionId, input.turnId, 'context.inject', 'No policy guidance was pending for this request.');
     }
