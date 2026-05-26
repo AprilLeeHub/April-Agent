@@ -78,21 +78,7 @@ export function createRuntime(options: CreateRuntimeOptions) {
   const summaryProvider = options.summary
     ? new ProviderSummaryProvider(options.summary.provider ?? options.provider, options.summary.config)
     : undefined;
-  const memoryOrchestrator = options.memory && options.memory.enabled !== false
-    ? new MemoryOrchestrator({
-      store: new LocalMarkdownStore({
-        rootDir: options.rootDir,
-        ...(options.memory.memoryDir ? { memoryDir: options.memory.memoryDir } : {}),
-        ...(options.memory.notesDirectory ? { notesDirectory: options.memory.notesDirectory } : {}),
-      }),
-      ...(options.memory.sources ? { sources: options.memory.sources } : {}),
-      summaryProvider: options.memory.summaryProvider ?? summaryProvider,
-      ...(options.memory.metadata ? { metadata: options.memory.metadata } : {}),
-      ...(options.memory.recallLimit !== undefined ? { recallLimit: options.memory.recallLimit } : {}),
-      ...(options.memory.extractionDirectory ? { extractionDirectory: options.memory.extractionDirectory } : {}),
-      ...(options.memory.maxSummaryMessages !== undefined ? { maxSummaryMessages: options.memory.maxSummaryMessages } : {}),
-    })
-    : undefined;
+  const memoryOrchestrator = buildMemoryOrchestrator(options, summaryProvider);
   const contextManager = new ContextManager(
     options.provider,
     observability,
@@ -141,4 +127,33 @@ export function createRuntime(options: CreateRuntimeOptions) {
     summaryProvider,
     memoryOrchestrator,
   };
+}
+
+function buildMemoryOrchestrator(
+  options: CreateRuntimeOptions,
+  summaryProvider?: SummaryProvider,
+): MemoryOrchestrator | undefined {
+  if (!options.memory || options.memory.enabled === false) {
+    return undefined;
+  }
+
+  const memoryOptions: CreateRuntimeMemoryOptions = options.memory;
+  const orchestratorOptions: ConstructorParameters<typeof MemoryOrchestrator>[0] = {
+    store: new LocalMarkdownStore({
+      rootDir: options.rootDir,
+      ...(memoryOptions.memoryDir ? { memoryDir: memoryOptions.memoryDir } : {}),
+      ...(memoryOptions.notesDirectory ? { notesDirectory: memoryOptions.notesDirectory } : {}),
+    }),
+    ...(memoryOptions.sources ? { sources: memoryOptions.sources } : {}),
+    ...(memoryOptions.metadata ? { metadata: memoryOptions.metadata } : {}),
+    ...(memoryOptions.recallLimit !== undefined ? { recallLimit: memoryOptions.recallLimit } : {}),
+    ...(memoryOptions.extractionDirectory ? { extractionDirectory: memoryOptions.extractionDirectory } : {}),
+    ...(memoryOptions.maxSummaryMessages !== undefined ? { maxSummaryMessages: memoryOptions.maxSummaryMessages } : {}),
+  };
+  const memorySummaryProvider = memoryOptions.summaryProvider ?? summaryProvider;
+  if (memorySummaryProvider) {
+    orchestratorOptions.summaryProvider = memorySummaryProvider;
+  }
+
+  return new MemoryOrchestrator(orchestratorOptions);
 }
