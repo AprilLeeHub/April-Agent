@@ -1,3 +1,11 @@
+/*
+ * @Author: leeTing april.lee0828@gmail.com
+ * @Date: 2026-04-24 16:39:47
+ * @LastEditors: leeTing april.lee0828@gmail.com
+ * @LastEditTime: 2026-05-26 10:42:27
+ * @FilePath: /april-agent/src/index.ts
+ * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
+ */
 /**
  * Summary: Public runtime exports for the current implementation surface.
  */
@@ -17,7 +25,7 @@ export * from './llm/deepseek-tokenizer.js';
 export * from './llm/provider.js';
 export * from './runtime/create-runtime.js';
 export * from './runtime/provider-summary.js';
-export * from './runtime/summary-model.config.js';
+export * from './config/index.js';
 export * from './session/session-query.js';
 export * from './storage/artifact-store.js';
 export * from './storage/checkpoint-store.js';

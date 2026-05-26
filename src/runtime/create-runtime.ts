@@ -28,6 +28,7 @@ import { createBashTool } from '../tools/builtin/bash-tool.js';
 import { createFileTools } from '../tools/builtin/file-tools.js';
 import { createMemoryFacadeTools } from '../tools/builtin/memory-facade-tools.js';
 import { createSearchTools } from '../tools/builtin/search-tools.js';
+import { memoryExtractionConfig } from '../config/memory-extraction.config.js';
 import { ProviderSummaryProvider } from './provider-summary.js';
 
 export interface CreateRuntimeSummaryOptions {
@@ -78,7 +79,8 @@ export function createRuntime(options: CreateRuntimeOptions) {
   const summaryProvider = options.summary
     ? new ProviderSummaryProvider(options.summary.provider ?? options.provider, options.summary.config)
     : undefined;
-  const memoryOrchestrator = buildMemoryOrchestrator(options, summaryProvider);
+  const memorySummaryProvider = buildMemorySummaryProvider(options);
+  const memoryOrchestrator = buildMemoryOrchestrator(options, memorySummaryProvider);
   const contextManager = new ContextManager(
     options.provider,
     observability,
@@ -150,10 +152,23 @@ function buildMemoryOrchestrator(
     ...(memoryOptions.extractionDirectory ? { extractionDirectory: memoryOptions.extractionDirectory } : {}),
     ...(memoryOptions.maxSummaryMessages !== undefined ? { maxSummaryMessages: memoryOptions.maxSummaryMessages } : {}),
   };
-  const memorySummaryProvider = memoryOptions.summaryProvider ?? summaryProvider;
-  if (memorySummaryProvider) {
-    orchestratorOptions.summaryProvider = memorySummaryProvider;
+  if (summaryProvider) {
+    orchestratorOptions.summaryProvider = summaryProvider;
   }
 
   return new MemoryOrchestrator(orchestratorOptions);
+}
+
+function buildMemorySummaryProvider(options: CreateRuntimeOptions): SummaryProvider | undefined {
+  if (!options.memory || options.memory.enabled === false) {
+    return undefined;
+  }
+
+  if (options.memory.summaryProvider) {
+    return options.memory.summaryProvider;
+  }
+
+  // Episodic extraction uses a dedicated fast model so memory persistence does
+  // not depend on the main reasoning model or on context-summary configuration.
+  return new ProviderSummaryProvider(options.provider, memoryExtractionConfig);
 }

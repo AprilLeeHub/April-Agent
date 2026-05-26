@@ -7,7 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { createAssistantMessage } from '../src/llm/provider.js';
 import { createRuntime } from '../src/runtime/create-runtime.js';
-import { smallModelSummaryConfig } from '../src/runtime/summary-model.config.js';
+import { memoryExtractionConfig } from '../src/config/memory-extraction.config.js';
+import { smallModelSummaryConfig } from '../src/config/summary-model.config.js';
 import type { Message, ProviderAdapter, ProviderRequest, ProviderResponse } from '../src/types/index.js';
 
 class FakeProvider implements ProviderAdapter {
@@ -118,6 +119,12 @@ describe('createRuntime', () => {
           finishReason: 'stop',
         }),
       },
+      {
+        assistant: createAssistantMessage({
+          content: '- Durable memory: vite build fix recalled and persisted.',
+          finishReason: 'stop',
+        }),
+      },
     ]);
     const runtime = createRuntime({
       provider,
@@ -164,6 +171,51 @@ describe('createRuntime', () => {
     await eventually(async () => {
       const matches = await runtime.memoryOrchestrator?.search({ query: 'runtime-memory-session turn 0', limit: 10 });
       expect(matches?.some((match) => match.path?.includes('/episodes/'))).toBe(true);
+    });
+  });
+
+  it('uses the dedicated extraction model for episodic memory summarization', async () => {
+    const rootDir = await mkdtemp(path.join(os.tmpdir(), 'april-agent-runtime-memory-llm-'));
+    tempDirs.push(rootDir);
+    const provider = new FakeProvider([
+      {
+        assistant: createAssistantMessage({
+          content: 'Primary answer from the main model.',
+          finishReason: 'stop',
+        }),
+      },
+      {
+        assistant: createAssistantMessage({
+          content: '- Durable memory: flash extraction summary',
+          finishReason: 'stop',
+        }),
+      },
+    ]);
+    const runtime = createRuntime({
+      provider,
+      model: 'fake-model',
+      rootDir,
+      memory: {},
+    });
+
+    await runtime.engine.submitUserInput('runtime-memory-llm-session', 'Summarize this turn and keep a durable memory.');
+    await runtime.engine.confirmTurn('runtime-memory-llm-session');
+    const completed = await runtime.engine.runTurn('runtime-memory-llm-session');
+
+    expect(completed.status).toBe('completed');
+
+    await eventually(async () => {
+      expect(provider.requests).toHaveLength(2);
+      expect(provider.requests[1]).toMatchObject({
+        model: memoryExtractionConfig.model,
+        tools: [],
+        extra: memoryExtractionConfig.extra,
+      });
+    });
+
+    await eventually(async () => {
+      const matches = await runtime.memoryOrchestrator?.search({ query: 'flash extraction summary', limit: 5 });
+      expect(matches?.some((match) => match.content.includes('flash extraction summary'))).toBe(true);
     });
   });
 });
