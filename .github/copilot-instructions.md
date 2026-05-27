@@ -52,8 +52,14 @@ P4: Cross-session Cache (token optimization)
 
 ```
 src/              - Source code
-  retry.py        - Retry utilities with exponential backoff
-  agent.py        - ReAct agent runtime
+  memory/         - Memory system
+    token_budget.py    - Token budget management
+    compressor.py      - Context compression (P0)
+    project_context.py - L0 project context store (P1)
+    recall.py          - Memory recall orchestration (P2)
+    knowledge.py       - Knowledge entry model & store (P3)
+    cleanup.py         - Knowledge lifecycle cleanup (P3)
+    cache.py           - Session & cross-session cache (P4)
 docs/             - Design documents and reviews
 tests/            - Test files
 ```
