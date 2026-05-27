@@ -130,19 +130,26 @@ class KnowledgeCleaner:
         """Find and handle contradicting knowledge pairs."""
         active = self.store.query(status=KnowledgeStatus.ACTIVE)
         contradictions = 0
+        deprecated_ids: set[str] = set()
 
         for i, entry_a in enumerate(active):
+            if entry_a.id in deprecated_ids:
+                continue
             for entry_b in active[i + 1 :]:
+                if entry_b.id in deprecated_ids:
+                    continue
                 if self._contradiction_fn(entry_a.content, entry_b.content):
                     contradictions += 1
                     # Keep the one with higher confidence
                     if entry_a.confidence >= entry_b.confidence:
                         entry_b.deprecate()
                         self.store.add(entry_b)
+                        deprecated_ids.add(entry_b.id)
                     else:
                         entry_a.deprecate()
                         self.store.add(entry_a)
-                        break  # entry_a is deprecated, move to next
+                        deprecated_ids.add(entry_a.id)
+                        break  # entry_a is deprecated, skip remaining comparisons
 
         return contradictions
 

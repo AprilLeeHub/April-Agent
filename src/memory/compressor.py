@@ -129,7 +129,7 @@ class SlidingWindowCompressor(ContextCompressor):
         # Trim from important_older if still over budget
         total = sum(m.token_count or self.estimate_tokens(m.content) for m in result_msgs)
         while total > max_tokens and important_older:
-            removed = important_older.pop(0)
+            important_older.pop(0)
             result_msgs = system_msgs + summary_parts + important_older + recent
             total = sum(m.token_count or self.estimate_tokens(m.content) for m in result_msgs)
 
