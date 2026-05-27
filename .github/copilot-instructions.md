@@ -2,17 +2,17 @@
 
 ## Project Overview
 
-April-Agent is a ReAct (Reasoning + Acting) agent runtime demo implemented in Python, featuring memory management, context compression, and retry mechanisms.
+April-Agent is a ReAct (Reasoning + Acting) agent runtime demo implemented in Node.js + TypeScript, featuring memory management, context compression, and retry mechanisms.
 
 ## Conventions
 
-- Language: Python 3.10+
-- Use type hints for all function signatures
-- Follow PEP 8 style guidelines
-- Use `asyncio` for async operations
+- Language: TypeScript (Node.js, ES2022 target)
+- Use strict TypeScript with explicit types for all function signatures
+- Use interfaces for data shapes, classes for stateful components
+- Use `async/await` for async operations
 - Retry logic should use exponential backoff with jitter
 - All API interactions must have configurable retry policies
-- Tests use `pytest` and `pytest-asyncio`
+- Tests use Jest with `ts-jest`
 
 ## Architecture Principles
 
@@ -52,21 +52,22 @@ P4: Cross-session Cache (token optimization)
 
 ```
 src/              - Source code
+  index.ts        - Package entry point / re-exports
   memory/         - Memory system
-    token_budget.py    - Token budget management
-    compressor.py      - Context compression (P0)
-    project_context.py - L0 project context store (P1)
-    recall.py          - Memory recall orchestration (P2)
-    knowledge.py       - Knowledge entry model & store (P3)
-    cleanup.py         - Knowledge lifecycle cleanup (P3)
-    cache.py           - Session & cross-session cache (P4)
+    tokenBudget.ts    - Token budget management
+    compressor.ts     - Context compression (P0)
+    projectContext.ts - L0 project context store (P1)
+    recall.ts         - Memory recall orchestration (P2)
+    knowledge.ts      - Knowledge entry model & store (P3)
+    cleanup.ts        - Knowledge lifecycle cleanup (P3)
+    cache.ts          - Session & cross-session cache (P4)
 docs/             - Design documents and reviews
-tests/            - Test files
+tests/            - Test files (*.test.ts)
 ```
 
 ## Running Tests
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/
+npm install
+npm test
 ```
